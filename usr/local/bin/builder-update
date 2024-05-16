@@ -1,0 +1,26 @@
+#!/bin/tcsh
+
+# 1. Update the Ports Tree
+cd /usr/ports && git pull && cd -
+
+# 2. Process each Profile
+foreach file (/usr/local/etc/builder.d/*.sh)
+   # Echo
+   echo "Processing Profile ${file}"
+
+   # Load Profile
+   source ${file}
+
+   # 2. Do a Bulk Build
+   poudriere bulk -j ${BUILD_JAIL_NAME} -p ${POUDIERE_PORTS_TREE_NAME} -z ${POUDIERE_PACKAGE_SET_NAME} -f /usr/local/etc/poudriere.d/${BUILD_JAIL_NAME}-${POUDIERE_PORTS_TREE_NAME}-${POUDIERE_PACKAGE_SET_NAME}-pkglist
+
+   # Distribute them over the Network again
+   mkdir -p /srv/packages/${BUILD_JAIL_NAME}/${POUDIERE_PACKAGE_SET_NAME}
+
+   rsync -arv --delete /usr/local/poudriere/data/packages/${BUILD_JAIL_NAME}-${POUDIERE_PORTS_TREE_NAME}-${POUDIERE_PACKAGE_SET_NAME}/ /srv/packages/${BUILD_JAIL_NAME}/${POUDIERE_PACKAGE_SET_NAME}
+   chown -R www:wheel /srv/packages/${BUILD_JAIL_NAME}/${POUDIERE_PACKAGE_SET_NAME}
+   chown -R www:wheel /srv/packages/
+end
+
+# 3. Do Package Upgrades (only matching the current Running Profile)
+pkg upgrade
