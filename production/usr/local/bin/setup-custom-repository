@@ -1,0 +1,18 @@
+#!/bin/tcsh
+
+# Define Parameters
+setenv OPNSENSE_RELEASE "24.1"
+setenv OPNSENSE_FREEBSD_BASE "13"
+setenv BUILD_JAIL_NAME "opnsense241"
+setenv POUDIERE_PORTS_TREE_NAME "opnports"
+setenv POUDIERE_PACKAGE_SET_NAME "customsense"
+setenv OPNSENSE_BUILDER_HOSTNAME "opnsensebuilder1.MYDOMAIN.TLD"
+
+# Automatically Performed
+cat <<EOF > /usr/local/etc/pkg/repos/custom.conf
+Custom: {
+  url      : https://${OPNSENSE_BUILDER_HOSTNAME}:8443/${BUILD_JAIL_NAME}/${POUDIERE_PACKAGE_SET_NAME},
+  priority : 5,
+  enabled  : yes
+}
+EOF

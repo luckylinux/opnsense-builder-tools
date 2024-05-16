@@ -1,0 +1,164 @@
+#!/bin/tcsh
+
+# Source: https://forum.opnsense.org/index.php?topic=21739.0
+
+# Default Version
+setenv OPNSENSE_VERSION_DEFAULT `opnsense-version | sed -E -e "s/[a-zA-Z]+ ([0-9]+).([0-9]+).*/\1\2/"`
+setenv POUDRIERE_PROFILE_DEFAULT "opnsense${OPNSENSE_VERSION_DEFAULT}.sh"
+
+# Define Profile
+if( $#argv == 0 ) then
+   setenv POUDRIERE_PROFILE "${POUDRIERE_PROFILE_DEFAULT}"
+else
+   setenv POUDRIERE_PROFILE $argv[1]
+endif
+
+# Load Profile
+source /usr/local/etc/builder.d/${POUDRIERE_PROFILE}
+
+# Download Ports Collection
+# Clone the Ports tree to /usr/ports
+opnsense-code ports
+
+# Install Poudriere
+make -C /usr/ports/ports-mgmt/poudriere install clean
+
+# Getting the distfiles in place
+mkdir -p /usr/opnsense-dist/pub/FreeBSD/releases/amd64/amd64/${OPNSENSE_RELEASE}-RELEASE
+
+# Get the System Source Code
+# Clone the OPNsense source code repository to /usr/src
+opnsense-code src
+
+# Make git switch to the desired Release Tag
+cd /usr/src && git checkout ${OPNSENSE_RELEASE} && cd -
+
+# Build the Required Source Tarball
+tar -C / -cvJf /usr/opnsense-dist/pub/FreeBSD/releases/amd64/amd64/${OPNSENSE_RELEASE}-RELEASE/src.txz --exclude-vcs usr/src
+
+# Download the pre-built release tarball for the base system
+fetch https://pkg.opnsense.org/FreeBSD:${OPNSENSE_FREEBSD_BASE}:amd64/${OPNSENSE_RELEASE}/sets/base-${OPNSENSE_RELEASE}-amd64.txz -o /usr/opnsense-dist/pub/FreeBSD/releases/amd64/amd64/${OPNSENSE_RELEASE}-RELEASE/base.txz
+
+# Create MANIFEST File for Poudriere
+cd /usr/opnsense-dist/pub/FreeBSD/releases/amd64/amd64/${OPNSENSE_RELEASE}-RELEASE && /usr/src/release/scripts/make-manifest.sh base.txz src.txz > MANIFEST
+
+# Configure Poudriere
+cp /usr/local/etc/poudriere.conf.sample /usr/local/etc/poudriere.conf
+nano /usr/local/etc/poudriere.conf
+
+# Set "NO_ZFS=yes"
+# Set FREEBSD_HOST=file:///usr/opnsense-dist
+# Set BUILD_AS_NON_ROOT=no
+
+# Make the Build System stop complain and just do its Thing
+echo ALLOW_UNSUPPORTED_SYSTEM=yes > /usr/local/etc/poudriere.d/make.conf
+
+# Use OpenSSL (Default)
+echo DEFAULT_VERSIONS+= ssl=openssl >> /usr/local/etc/poudriere.d/make.conf
+
+# Build jail creation and initial ports build
+poudriere jail -c -j ${BUILD_JAIL_NAME} -v ${OPNSENSE_FREEBSD_BASE}-RELEASE
+
+# Hook up the Ports Tree with Poudriere and name it just "${POUDIERE_PORTS_TREE_NAME}"
+poudriere ports -c -m null -M /usr/ports -p "${POUDIERE_PORTS_TREE_NAME}"
+
+# Install ccache in order to allow the caching of compilation artifacts for later re-use
+echo devel/ccache > /usr/local/etc/poudriere.d/${BUILD_JAIL_NAME}-${POUDIERE_PORTS_TREE_NAME}-${POUDIERE_PACKAGE_SET_NAME}-pkglist
+
+# Beging Building the Packages
+poudriere bulk -j ${BUILD_JAIL_NAME} -p ${POUDIERE_PORTS_TREE_NAME} -z ${POUDIERE_PACKAGE_SET_NAME} -f /usr/local/etc/poudriere.d/${BUILD_JAIL_NAME}-${POUDIERE_PORTS_TREE_NAME}-${POUDIERE_PACKAGE_SET_NAME}-pkglist
+
+# List built Packages
+ls /usr/local/poudriere/data/packages/${BUILD_JAIL_NAME}-${POUDIERE_PORTS_TREE_NAME}-${POUDIERE_PACKAGE_SET_NAME}/All
+
+# Install the ccache Package that we just built
+pkg add /usr/local/poudriere/data/packages/${BUILD_JAIL_NAME}-${POUDIERE_PORTS_TREE_NAME}-${POUDIERE_PACKAGE_SET_NAME}/All/ccache-*.txz
+setenv CCACHE_PKG `find /usr/local/poudriere/data/packages/${BUILD_JAIL_NAME}-${POUDIERE_PORTS_TREE_NAME}-${POUDIERE_PACKAGE_SET_NAME}/All/ -iname "ccache*.pkg" | head -1`
+
+# Setup the Build Cache
+mkdir -p /var/cache/ccache/poudriere
+
+# Set maximum Cache Size
+echo max_size = 5.0G > /var/cache/ccache/poudriere/ccache.conf
+
+# Enable Cache in Poudriere Configuration
+nano /usr/local/etc/poudriere.conf
+
+# Set CCACHE_DIR=/var/cache/ccache/poudriere
+
+# Add Poudriere to the List of Packages to build so that we will get Updates in the Future
+echo ports-mgmt/poudriere >> /usr/local/etc/poudriere.d/${BUILD_JAIL_NAME}-${POUDIERE_PORTS_TREE_NAME}-${POUDIERE_PACKAGE_SET_NAME}-pkglist
+
+# Find the Package you actually want to build
+# whereis $mypackagename
+whereis cbsd
+#cbsd: /usr/ports/sysutils/cbsd
+
+# Add the Packages you actually want to build
+#echo $packagecategory/$packagename >> /usr/local/etc/poudriere.d/${BUILD_JAIL_NAME}-${POUDIERE_PORTS_TREE_NAME}-${POUDIERE_PACKAGE_SET_NAME}-pkglist
+echo sysutils/cbsd >> /usr/local/etc/poudriere.d/${BUILD_JAIL_NAME}-${POUDIERE_PORTS_TREE_NAME}-${POUDIERE_PACKAGE_SET_NAME}-pkglist
+
+# If you are looking for something but don't even know the exact name of the program, the easiest thing is probably to use this website: https://www.freshports.org
+
+# When you are happy with your package list, simply invoke the bulk build command again to make Poudriere build the missing packages
+poudriere bulk -j ${BUILD_JAIL_NAME} -p ${POUDIERE_PORTS_TREE_NAME} -z ${POUDIERE_PACKAGE_SET_NAME} -f /usr/local/etc/poudriere.d/${BUILD_JAIL_NAME}-${POUDIERE_PORTS_TREE_NAME}-${POUDIERE_PACKAGE_SET_NAME}-pkglist
+
+# Make the package manager aware of your additional repository
+#nano /usr/local/etc/pkg/repos/custom.conf
+
+# Paste the following into it
+#Custom: {
+#  url      : file:///usr/local/poudriere/data/packages/${BUILD_JAIL_NAME}-${POUDIERE_PORTS_TREE_NAME}-${POUDIERE_PACKAGE_SET_NAME},
+#  priority : 20,
+#  enabled  : yes
+#}
+
+# Automatically Performed
+cat <<EOF > /usr/local/etc/pkg/repos/custom.conf
+Custom: {
+  url      : file:///usr/local/poudriere/data/packages/${BUILD_JAIL_NAME}-${POUDIERE_PORTS_TREE_NAME}-${POUDIERE_PACKAGE_SET_NAME},
+  priority : 20,
+  enabled  : yes
+}
+EOF
+
+
+# Make the Package Manager read the Repository Information again
+pkg update
+
+# After the previous Step, I can simply install my Jail Manager using `pkg install` Command
+pkg install cbsd
+
+############################################################################################
+############################################################################################
+############################################################################################
+## CONTINUE FROM HERE ... CONTINUE FROM HERE ... CONTINUE FROM HERE ... CONTINUE FROM HERE
+############################################################################################
+############################################################################################
+############################################################################################
+
+# Build options
+#poudriere options -j ${BUILD_JAIL_NAME} -p ${POUDIERE_PORTS_TREE_NAME} -z ${POUDIERE_PACKAGE_SET_NAME} -f /usr/local/etc/poudriere.d/${BUILD_JAIL_NAME}-${POUDIERE_PORTS_TREE_NAME}-${POUDIERE_PACKAGE_SET_NAME}-pkglist
+
+# A better way might be to configure only the ports that you are interested in customizing. 
+# While cbsd doesn't in fact currenly have any interesting build-time options to tweak, we're going to do it anyway here for demonstration purposes. 
+# Here's how to do it
+make -C /usr/ports/sysutils/cbsd config
+
+# This will bring up the configuration menu and if you confirm the selection, the options get saved. 
+# By default, the ports tree will save its options in /var/db/ports. 
+# There should be a "sysutils_cbsd" directory inside now. 
+# You can simply copy those over for use by Poudriere
+#
+# In this way you can configure only the ports that you actually care about and not potentially hundreds of others as well.
+#
+mkdir -p /usr/local/etc/poudriere.d/${BUILD_JAIL_NAME}-${POUDIERE_PORTS_TREE_NAME}-${POUDIERE_PACKAGE_SET_NAME}-options
+cp -r /var/db/ports/* /usr/local/etc/poudriere.d/${BUILD_JAIL_NAME}-${POUDIERE_PORTS_TREE_NAME}-${POUDIERE_PACKAGE_SET_NAME}-options/
+
+# Distribute them over the Network
+mkdir -p /srv/packages/${BUILD_JAIL_NAME}/${POUDIERE_PACKAGE_SET_NAME}
+
+rsync -arv --delete /usr/local/poudriere/data/packages/${BUILD_JAIL_NAME}-${POUDIERE_PORTS_TREE_NAME}-${POUDIERE_PACKAGE_SET_NAME}/ /srv/packages/${BUILD_JAIL_NAME}/${POUDIERE_PACKAGE_SET_NAME}
+chown -R www:wheel /srv/packages/${BUILD_JAIL_NAME}/${POUDIERE_PACKAGE_SET_NAME}
+chown -R www:wheel /srv/packages/
+

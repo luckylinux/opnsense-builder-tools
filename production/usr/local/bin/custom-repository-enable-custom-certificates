@@ -1,0 +1,82 @@
+#!/bin/tcsh
+
+# Source: https://forum.opnsense.org/index.php?topic=21739.0
+
+# Define Parameters
+setenv OPNSENSE_RELEASE "24.1"
+setenv OPNSENSE_FREEBSD_BASE "13"
+setenv BUILD_JAIL_NAME "opnsense241"
+setenv POUDIERE_PORTS_TREE_NAME "opnports"
+setenv POUDIERE_PACKAGE_SET_NAME "customsense"
+setenv OPNSENSE_BUILDER_HOSTNAME "opnsensebuilder1.MYDOMAIN.TLD"
+
+# Automatically Performed
+cat <<EOF > /usr/local/etc/pkg/repos/custom.conf
+Custom: {
+  url      : https://${OPNSENSE_BUILDER_HOSTNAME}:8443/${BUILD_JAIL_NAME}/${POUDIERE_PACKAGE_SET_NAME},
+  priority : 5,
+  enabled  : yes
+}
+EOF
+
+# On a Desktop convert CERTIFICATES to the same Format as the other Certificates used by FreeBSD
+# openssl x509 -in opnsensebuilder1/OPNSenseBuilder1-CA.crt -text -fingerprint -outform PEM -out opnsensebuilder1/OPNSenseBuilder1-CA.pem
+
+# Combine CA + CERT into one
+# cat opnsensebuilder1/OPNSenseBuilder1-CA.pem opnsensebuilder1/OPNSenseBuilder1-CERT.pem > opnsensebuilder1/OPNSenseBuilder1-COMBINED.pem
+
+# Upload the CERTIFICATES (for TLS / HTTPS) generated on the Builder Servers
+# /usr/local/etc/ssl/ Folder does NOT seem to be scanned by "certctl rehash"
+# /usr/local/share/certs Folder IS scanned by "certctl rehash"
+#
+# scp <myfiles> root@MY_OPNSENSE_PRODUCTION_IP:/usr/local/share/certs
+
+# If a cert.pem file exists, all other certificates are ignored when performing "pkg update" !!!
+#
+# See for Instance these Thread for more Information:
+# - https://forums.freebsd.org/threads/pkg-private-certificate-authority.87833/#post-596096
+# - https://forums.freebsd.org/threads/local-pkg-repo-w-tls-via-poudriere-nginx-and-a-smallstep-ca-step-cli-step-certificates.79159/
+#
+# For this reason we remove (backup FIRST) the file that prevents custom Certificates from being used
+setenv timestamp `date +"%Y%m%d"`
+mv /etc/ssl/cert.pem /etc/ssl/cert.pem.backup.${timestamp}
+mv /usr/local/etc/ssl/cert.pem /usr/local/etc/ssl/cert.pem.backup.${timestamp}
+
+# Rebuild the list of trusted certificate authorities using certctl rehash
+certctl rehash
+
+# Prevent pkg from upgrading to Packages that come from a different Repository than it was originally installed from
+# Not fully working though
+# Add in /usr/local/etc/pkg.conf
+CONSERVATIVE_UPGRADE = true;
+
+# Remove non-production Packages
+pkg remove poudriere
+
+# Remove unused Dependenciees / Packages
+pkg clean
+pkg autoremove
+
+# Check Status of Installed Packages
+pkg check -a -d -v
+
+# Also force update of the cache
+pkg update -f
+
+# Associate / Tag some Packages in order to (try ?) to prevent upgrading from our <custom> Repository
+pkg install -r OPNsense libssh2
+pkg install -r OPNsense pkg
+pkg annotate -A pkg repository OPNsense
+pkg annotate -A pkg repository libssh2
+
+# The only way to avoid upgrade of the "pkg" Package is to lock it. No amount of annotation would work (not even with "CONSERVATIVE_UPGRADE = true;" set)
+pkg lock pkg
+
+# Debug issues with pkg
+pkg -vv | grep -i REPOS
+
+# Make the Package Manager read the Repository Information again
+pkg update
+
+# After the previous Step, I can simply install my Jail Manager using `pkg install` Command
+pkg install sysutils/py-salt
