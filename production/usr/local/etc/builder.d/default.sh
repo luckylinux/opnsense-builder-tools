@@ -23,3 +23,7 @@ setenv BUILD_JAIL_NAME "opnsense${BUILD_JAIL_VERSION_STRING}"
 # Define Constant/Fixed Parameters
 setenv POUDIERE_PORTS_TREE_NAME "opnports"
 setenv POUDIERE_PACKAGE_SET_NAME "customsense"
+
+# Package Builder Hostname
+# Needed in order to point "pkg" to the Builder-built Packages (served over HTTPS)
+setenv OPNSENSE_BUILDER_HOSTNAME "opnsensebuilder1.MYDOMAIN.TLD"

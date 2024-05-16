@@ -1,17 +1,16 @@
 #!/bin/tcsh
 
+# Define Profile
+if( $#argv == 0 ) then
+   setenv BUILDER_PROFILE "default.sh"
+else
+   setenv BUILDER_PROFILE $argv[1]
+endif
 
-/usr/local/etc/builder.d/default.sh
+# Load Profile
+source /usr/local/etc/builder.d/${BUILDER_PROFILE}
 
-# Define Parameters
-setenv OPNSENSE_RELEASE "24.1"
-setenv OPNSENSE_FREEBSD_BASE "13"
-setenv BUILD_JAIL_NAME "opnsense241"
-setenv POUDIERE_PORTS_TREE_NAME "opnports"
-setenv POUDIERE_PACKAGE_SET_NAME "customsense"
-setenv OPNSENSE_BUILDER_HOSTNAME "opnsensebuilder1.MYDOMAIN.TLD"
-
-# Automatically Performed
+# Automatically Create custom Repository
 cat <<EOF > /usr/local/etc/pkg/repos/custom.conf
 Custom: {
   url      : https://${OPNSENSE_BUILDER_HOSTNAME}:8443/${BUILD_JAIL_NAME}/${POUDIERE_PACKAGE_SET_NAME},
