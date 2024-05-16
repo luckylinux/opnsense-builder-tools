@@ -1,5 +1,8 @@
 #!/bin/tcsh
 
+
+/usr/local/etc/builder.d/default.sh
+
 # Define Parameters
 setenv OPNSENSE_RELEASE "24.1"
 setenv OPNSENSE_FREEBSD_BASE "13"

@@ -2,6 +2,17 @@
 
 # Source: https://forum.opnsense.org/index.php?topic=21739.0
 
+# Define Profile
+if( $#argv == 0 ) then
+   setenv BUILDER_PROFILE "default.sh"
+else
+   setenv BUILDER_PROFILE $argv[1]
+endif
+
+# Load Profile
+source /usr/local/etc/builder.d/${BUILDER_PROFILE}
+
+
 # Define Parameters
 setenv OPNSENSE_RELEASE "24.1"
 setenv OPNSENSE_FREEBSD_BASE "13"
