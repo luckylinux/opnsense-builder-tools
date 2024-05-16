@@ -129,25 +129,18 @@ pkg update
 # After the previous Step, I can simply install my Jail Manager using `pkg install` Command
 pkg install cbsd
 
-############################################################################################
-############################################################################################
-############################################################################################
-## CONTINUE FROM HERE ... CONTINUE FROM HERE ... CONTINUE FROM HERE ... CONTINUE FROM HERE
-############################################################################################
-############################################################################################
-############################################################################################
-
 # Build options
+# This will Popup **A LOT** of Dialogs for EVERY SINGLE PACKAGE
 #poudriere options -j ${BUILD_JAIL_NAME} -p ${POUDIERE_PORTS_TREE_NAME} -z ${POUDIERE_PACKAGE_SET_NAME} -f /usr/local/etc/poudriere.d/${BUILD_JAIL_NAME}-${POUDIERE_PORTS_TREE_NAME}-${POUDIERE_PACKAGE_SET_NAME}-pkglist
 
-# A better way might be to configure only the ports that you are interested in customizing. 
-# While cbsd doesn't in fact currenly have any interesting build-time options to tweak, we're going to do it anyway here for demonstration purposes. 
+# A better way might be to configure only the ports that you are interested in customizing.
+# While cbsd doesn't in fact currenly have any interesting build-time options to tweak, we're going to do it anyway here for demonstration purposes.
 # Here's how to do it
 make -C /usr/ports/sysutils/cbsd config
 
-# This will bring up the configuration menu and if you confirm the selection, the options get saved. 
-# By default, the ports tree will save its options in /var/db/ports. 
-# There should be a "sysutils_cbsd" directory inside now. 
+# This will bring up the configuration menu and if you confirm the selection, the options get saved.
+# By default, the ports tree will save its options in /var/db/ports.
+# There should be a "sysutils_cbsd" directory inside now.
 # You can simply copy those over for use by Poudriere
 #
 # In this way you can configure only the ports that you actually care about and not potentially hundreds of others as well.
@@ -156,6 +149,7 @@ mkdir -p /usr/local/etc/poudriere.d/${BUILD_JAIL_NAME}-${POUDIERE_PORTS_TREE_NAM
 cp -r /var/db/ports/* /usr/local/etc/poudriere.d/${BUILD_JAIL_NAME}-${POUDIERE_PORTS_TREE_NAME}-${POUDIERE_PACKAGE_SET_NAME}-options/
 
 # Distribute them over the Network
+# Copy Packages to a Separate Folder where the www User has exclusive Permissions
 mkdir -p /srv/packages/${BUILD_JAIL_NAME}/${POUDIERE_PACKAGE_SET_NAME}
 
 rsync -arv --delete /usr/local/poudriere/data/packages/${BUILD_JAIL_NAME}-${POUDIERE_PORTS_TREE_NAME}-${POUDIERE_PACKAGE_SET_NAME}/ /srv/packages/${BUILD_JAIL_NAME}/${POUDIERE_PACKAGE_SET_NAME}
