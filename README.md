@@ -7,6 +7,9 @@ b. One (or more) OPNSense Dedicated Builders Instances
 
 **IMPORTANT**: I highly reccomend to setup the building Process on a Dedicated Builder Machine, in order to limit the Installation of Development Packages on the main / Production OPNSense Instance !!
 
+# Credits
+This Guide / Tools are based on the Excellent Guide from the [OPNSense Forum](https://forum.opnsense.org/index.php?topic=21739.0).
+
 # Scheduled Task
 
 ## Introduction
